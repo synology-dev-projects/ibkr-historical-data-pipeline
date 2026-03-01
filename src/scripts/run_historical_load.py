@@ -13,7 +13,6 @@ def main():
    clean_df = transform.run(h_config, raw_df)
    load.run(m_config,clean_df)
 
-   sys.exit(0)
 
 if __name__ == "__main__":
     main()
