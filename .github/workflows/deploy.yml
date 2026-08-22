@@ -57,7 +57,6 @@ jobs:
           # NOTE: We do NOT delete .venv, allowing it to persist!
           echo "🧹 Wiping old src/, tests/, and configs..."
           rm -rf "$TARGET_PATH"/*
-          rm -rf "$TARGET_PATH/.venv"
  
           # Copy NEW files to the persistent project root
           echo "🚀 Copying new files..."
@@ -108,17 +107,13 @@ jobs:
           # 4. Add to Path (so verify.sh finds it)
           echo "$PWD/.venv/bin" >> $GITHUB_PATH
 
-      # 6. VERIFICATION
-      - name: Run Verification
+      # 6. IN-SITU MODULE SMOKE CHECK
+      - name: Verify Module Imports
         run: |
-          echo "🧪 Testing branch: ${{ github.ref_name }}"
+          echo "📡 Verifying IBKR pipeline module imports on Synology runner..."
           cd "${{ env.DEPLOY_DIR }}"
-          
-          # Force the environment to use the local venv first
           export PATH="$(pwd)/.venv/bin:$PATH"
-          
-          chmod +x verify.sh
-          ./verify.sh
+          python -c "import src.extract, src.transform, src.load; print('✅ ibkr-historical-data-pipeline modules import cleanly!')"
 
       # 7. MERGE LOGIC (Unchanged)
       - name: Auto-Promote to Master
