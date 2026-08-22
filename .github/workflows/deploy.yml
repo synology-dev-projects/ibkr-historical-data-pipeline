@@ -23,11 +23,10 @@ jobs:
       # 2. CHECKOUT
           # --- SETUP ---
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          # Use your PAT here instead of the default token
-          token: ${{ secrets.MY_GITHUB_PAT }}
+          token: ${{ secrets.PAT_TOKEN }}
 
       # 3. SETUP VARIABLES (Calculate Path EARLY)
       - name: Configure Deployment Paths
@@ -99,10 +98,18 @@ jobs:
           
           echo "📦 Installing dependencies..."
           pip install -r requirements.txt
-          #Inject the local shared library
-          # The '-e' flag ensures changes are live instantly
-          echo "Installing local common-lib..."
-          pip install -e ../common-lib
+          
+          # Inject the local shared library safely
+          if [ -d "../common-lib" ]; then
+            echo "📦 Installing local common-lib from ../common-lib..."
+            pip install -e ../common-lib
+          elif [ -d "/volume2/homes/rachardv/git-repos/master/common-lib" ]; then
+            echo "📦 Installing local common-lib from master..."
+            pip install -e /volume2/homes/rachardv/git-repos/master/common-lib
+          elif [ -d "/volume2/homes/rachardv/git-repos/develop/common-lib" ]; then
+            echo "📦 Installing local common-lib from develop..."
+            pip install -e /volume2/homes/rachardv/git-repos/develop/common-lib
+          fi
           
           # 4. Add to Path (so verify.sh finds it)
           echo "$PWD/.venv/bin" >> $GITHUB_PATH
