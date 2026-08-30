@@ -1,8 +1,11 @@
+import pytest
 import load
 import common_lib.connectors.postgres as postgres
 import pandas as pd
 
 pd.set_option('display.max_columns', None)
+
+@pytest.mark.integration
 def test_extract(env_config, pipeline_data):
     """
     """
@@ -11,6 +14,7 @@ def test_extract(env_config, pipeline_data):
     # print(raw_df)
     assert len(raw_df) > 0
 
+@pytest.mark.integration
 def test_transform(env_config, pipeline_data):
     """
     if input template found in post
@@ -23,6 +27,7 @@ def test_transform(env_config, pipeline_data):
     assert len(df) > 0
 
 
+@pytest.mark.integration
 def test_load(env_config, pipeline_data):
     """
     if input template found in post
