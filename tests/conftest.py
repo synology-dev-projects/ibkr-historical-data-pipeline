@@ -1,6 +1,5 @@
 # tests/conftest.py
 import pytest
-import extract, transform
 import logging
 import common_lib.config.main_config as config
 from common_lib.config.history_req_config import HistoryReqConfig
@@ -18,6 +17,11 @@ def pipeline_data(env_config):
     Runs the expensive pipeline ONCE and returns a dictionary
     containing all intermediate dataframes/variables.
     """
+    try:
+        import extract, transform
+    except ImportError as e:
+        pytest.skip(f"IBKR dependencies not installed: {e}")
+
     logging.info("\n[Setup] Running expensive pipeline extraction...")
     h_config = HistoryReqConfig(symbol="SPY"
                                 ,exchange="NASDAQ"
@@ -25,7 +29,6 @@ def pipeline_data(env_config):
                                 ,endDateStr="2026-02-24")
     raw_df = extract.run(env_config, h_config)
     clean_df = transform.run(h_config, raw_df)
-
 
     # 2. Return EVERYTHING in a dictionary
     return {
