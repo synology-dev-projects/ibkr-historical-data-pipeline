@@ -77,3 +77,20 @@ def test_parse_args_unit():
         assert h_config.startDateStr == "2026-01-01"
         assert h_config.endDateStr == "2026-01-05"
         assert h_config.barSizeSetting == "1 day"
+
+
+def test_extract_run_delegates_to_connector():
+    import extract
+    from common_lib.config.main_config import MainConfig
+    from unittest.mock import MagicMock
+
+    m_config = MagicMock(spec=MainConfig)
+    h_config = MagicMock(spec=HistoryReqConfig)
+    expected_df = pd.DataFrame([{"symbol": "SPY", "close": 500.0}])
+
+    with patch("common_lib.connectors.ibkr.extract_ibkr_ticker_data", return_value=expected_df) as mock_extract:
+        result_df = extract.run(m_config, h_config, base_client_id=42)
+
+        mock_extract.assert_called_once_with(m_config, h_config, base_client_id=42)
+        assert result_df.equals(expected_df)
+
