@@ -21,7 +21,6 @@ jobs:
           rm -rf ./.??*
 
       # 2. CHECKOUT
-          # --- SETUP ---
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
@@ -29,28 +28,24 @@ jobs:
           token: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
 
       # 3. SETUP VARIABLES (Calculate Path EARLY)
-      - name: Configure Deployment Paths
+      - name: Configure Deployment Paths and Common Config
         run: |
-          # Load Synology Root
-          umask 002
-          cat ../../conf/syno_paths.env >> $GITHUB_ENV
-          
+          SYNOLOGY_ROOT_PATH="/volume2/homes/rachardv/git-repos"
+          echo "SYNOLOGY_ROOT_PATH=$SYNOLOGY_ROOT_PATH" >> $GITHUB_ENV
+
           # Calculate Variables
           BRANCH_NAME="${{ github.ref_name }}"
           REPO_NAME="${{ github.event.repository.name }}"
           
-          # Read SYNOLOGY_ROOT_PATH from the file we just loaded
-          source ../../conf/syno_paths.env
           TARGET_PATH="${SYNOLOGY_ROOT_PATH}/${BRANCH_NAME}/${REPO_NAME}"
+          COMMON_CONFIG_PATH="${SYNOLOGY_ROOT_PATH}/${BRANCH_NAME}/common_config"
+          mkdir -p "$COMMON_CONFIG_PATH"
           
           echo "📂 Target Path: $TARGET_PATH"
           echo "DEPLOY_DIR=$TARGET_PATH" >> $GITHUB_ENV
-
-      # 3.5 Pre-Flight Test Gate
-      - name: Run Pre-Flight Test Gate
-        run: |
-          echo "🧪 Running IBKR-Historical-Data Pytest Suite..."
-          pytest tests/ -v
+          
+          echo "📂 Config Path: $COMMON_CONFIG_PATH"
+          echo "CONFIG_DIR=$COMMON_CONFIG_PATH" >> $GITHUB_ENV
 
       # 4. DEPLOY CODE (Copy files BEFORE installing deps)
       - name: Sync Code to Project Root
@@ -68,23 +63,30 @@ jobs:
           cp -r src "$TARGET_PATH/"
           cp -r tests "$TARGET_PATH/"
           cp verify.sh "$TARGET_PATH/"
+          cp pytest.ini "$TARGET_PATH/"
           
           sudo chown -R 1026:100 "$TARGET_PATH"
           chmod -R 775 "$TARGET_PATH"
           
-          
           # Copy requirement files if they exist
           [ -f requirements.txt ] && cp requirements.txt "$TARGET_PATH/"
           [ -f requirements.in ] && cp requirements.in "$TARGET_PATH/"
+
+      # 4.5 SETUP PYTHON
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
 
       # 5. MANAGE VENV (Run execution INSIDE Project Root)
       - name: Update Project Virtualenv
         run: |
           cd "${{ env.DEPLOY_DIR }}"
           
-          # 1. Create .venv only if it doesn't exist (Persists between runs!)
-          if [ ! -d ".venv" ]; then
-            echo "🔨 Creating new virtual environment in project root..."
+          # 1. Create .venv if missing or if Python version < 3.12
+          if [ ! -d ".venv" ] || ! .venv/bin/python -c "import sys; exit(0 if sys.version_info >= (3, 12) else 1)" 2>/dev/null; then
+            echo "🔨 Creating new Python 3.13 virtual environment in project root..."
+            rm -rf .venv
             python3 -m venv .venv
           else
             echo "✅ Existing .venv found. Updating..."
@@ -93,11 +95,9 @@ jobs:
           # 2. Activate
           source .venv/bin/activate
           pip install --upgrade pip pip-tools
-          echo "🧹 Status before cleanup:"
-          ls -l requirements.txt || echo "File not found (Good)"
           
-          # 3. Compile/Install
-          if [ -f "requirements.in" ]; then
+          # 3. Compile/Install (Only compile if requirements.txt does not exist)
+          if [ ! -f "requirements.txt" ] && [ -f "requirements.in" ]; then
             echo "🔄 Compiling requirements.in..."
             pip-compile requirements.in --output-file=requirements.txt
           fi
@@ -112,13 +112,21 @@ jobs:
           elif [ -d "/volume2/homes/rachardv/git-repos/master/common-lib" ]; then
             echo "📦 Installing local common-lib from master..."
             pip install -e /volume2/homes/rachardv/git-repos/master/common-lib
-          elif [ -d "/volume2/homes/rachardv/git-repos/develop/common-lib" ]; then
-            echo "📦 Installing local common-lib from develop..."
-            pip install -e /volume2/homes/rachardv/git-repos/develop/common-lib
+          elif [ -d "/volume2/homes/rachardv/git-repos/develop2/common-lib" ]; then
+            echo "📦 Installing local common-lib from develop2..."
+            pip install -e /volume2/homes/rachardv/git-repos/develop2/common-lib
           fi
           
           # 4. Add to Path (so verify.sh finds it)
           echo "$PWD/.venv/bin" >> $GITHUB_PATH
+
+      # 5.5 IN-SITU TEST GATE
+      - name: Run In-Situ Test Gate
+        run: |
+          echo "🧪 Running IBKR-Historical-Data Pytest Suite in virtualenv..."
+          cd "${{ env.DEPLOY_DIR }}"
+          source .venv/bin/activate
+          python -m pytest tests/ -v
 
       # 6. IN-SITU MODULE SMOKE CHECK
       - name: Verify Module Imports
@@ -127,16 +135,3 @@ jobs:
           cd "${{ env.DEPLOY_DIR }}"
           export PATH="$(pwd)/.venv/bin:$PATH"
           python -c "import src.extract, src.transform, src.load; print('✅ ibkr-historical-data-pipeline modules import cleanly!')"
-
-      # 7. MERGE LOGIC (Unchanged)
-      - name: Auto-Promote to Master
-        if: github.ref_name == 'develop'
-        run: |
-          echo "✅ Develop verified. Promoting to Master..."
-          git config user.name "GitHub Actions Bot"
-          git config user.email "actions@github.com"
-          git fetch origin develop
-          git checkout master
-          git pull origin master
-          git merge origin/develop --no-ff -m "Auto-merge develop to master [Skip CI]"
-          git push origin master
