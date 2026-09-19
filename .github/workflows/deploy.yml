@@ -71,14 +71,21 @@ jobs:
           [ -f requirements.txt ] && cp requirements.txt "$TARGET_PATH/"
           [ -f requirements.in ] && cp requirements.in "$TARGET_PATH/"
 
+      # 4.5 SETUP PYTHON
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
       # 5. MANAGE VENV (Run execution INSIDE Project Root)
       - name: Update Project Virtualenv
         run: |
           cd "${{ env.DEPLOY_DIR }}"
           
-          # 1. Create .venv only if it doesn't exist (Persists between runs!)
-          if [ ! -d ".venv" ]; then
-            echo "🔨 Creating new virtual environment in project root..."
+          # 1. Create .venv if missing or if Python version < 3.12
+          if [ ! -d ".venv" ] || ! .venv/bin/python -c "import sys; exit(0 if sys.version_info >= (3, 12) else 1)" 2>/dev/null; then
+            echo "🔨 Creating new Python 3.13 virtual environment in project root..."
+            rm -rf .venv
             python3 -m venv .venv
           else
             echo "✅ Existing .venv found. Updating..."
@@ -88,8 +95,8 @@ jobs:
           source .venv/bin/activate
           pip install --upgrade pip pip-tools
           
-          # 3. Compile/Install
-          if [ -f "requirements.in" ]; then
+          # 3. Compile/Install (Only compile if requirements.txt does not exist)
+          if [ ! -f "requirements.txt" ] && [ -f "requirements.in" ]; then
             echo "🔄 Compiling requirements.in..."
             pip-compile requirements.in --output-file=requirements.txt
           fi
