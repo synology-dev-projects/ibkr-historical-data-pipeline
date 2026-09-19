@@ -10,8 +10,9 @@ logger = logging.getLogger(__name__)
 
 
 def main():
-    m_config = main_config.load_config()
+    m_config = None
     try:
+        m_config = main_config.load_config()
         h_config = parse_args()
         raw_df = extract.run(m_config, h_config)
         clean_df = transform.run(h_config, raw_df)
@@ -23,12 +24,11 @@ def main():
         error_msg = f"CRITICAL: run_historical_load.py failed with exception: {e}"
         logging.exception(error_msg)
         try:
-            nfty.send_ntfy_notification(
-                m_config.ntfy_endpoint,
-                "quant_alerts",
-                "🚨 PIPELINE FAILURE: IBKR Historical Load",
-                error_msg,
-                5
+            from common_lib.connectors.alerts import dispatch_pipeline_failure_alert
+            dispatch_pipeline_failure_alert(
+                pipeline_name="IBKR Historical Load",
+                error=error_msg,
+                config=m_config
             )
         except Exception as alert_err:
             logging.error(f"Failed to dispatch error notification: {alert_err}")
